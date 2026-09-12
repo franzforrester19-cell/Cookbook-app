@@ -1,0 +1,282 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#241a33" />
+    <meta
+      name="description"
+      content="A private, offline-friendly cookbook for collecting and organising your recipes."
+    />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="My Cookbook" />
+    <title>My Cookbook</title>
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <link
+      rel="icon"
+      type="image/svg+xml"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%23241a33'/%3E%3Cpath d='M17 14h25a6 6 0 0 1 6 6v31H22a7 7 0 0 1-7-7V16a2 2 0 0 1 2-2Z' fill='%23f4a261'/%3E%3Cpath d='M22 14v37M28 24h13M28 31h13M28 38h9' fill='none' stroke='%23241a33' stroke-width='3' stroke-linecap='round'/%3E%3C/svg%3E"
+    />
+    <link rel="apple-touch-icon" href="./assets/icon-192.svg" />
+    <link rel="stylesheet" href="./styles.css" />
+    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@7/dist/tesseract.min.js" defer></script>
+    <script src="./app.js" type="module"></script>
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="side-rail" aria-label="Cookbook navigation">
+        <a class="brand" href="#" aria-label="My Cookbook home">
+          <span class="brand-mark" aria-hidden="true">MC</span>
+          <span>My<br />Cookbook</span>
+        </a>
+
+        <nav class="side-nav">
+          <button class="nav-item active" type="button" data-view="all" aria-pressed="true">
+            <span aria-hidden="true">▦</span> All recipes
+          </button>
+          <button class="nav-item" type="button" data-view="favorites" aria-pressed="false">
+            <span aria-hidden="true">♡</span> Favourites
+          </button>
+        </nav>
+
+        <div class="side-bottom">
+          <p class="local-note"><span aria-hidden="true">●</span> Saved on this device</p>
+          <button class="nav-item" id="openSettings" type="button">
+            <span aria-hidden="true">⚙</span> Settings & backup
+          </button>
+        </div>
+      </aside>
+
+      <main class="main-content">
+        <header class="topbar">
+          <div>
+            <p class="eyebrow" id="todayLabel">Your kitchen library</p>
+            <h1 id="pageTitle">All recipes</h1>
+          </div>
+          <div class="top-actions">
+            <label class="search-box" for="searchInput">
+              <span aria-hidden="true">⌕</span>
+              <input id="searchInput" type="search" placeholder="Search recipes" autocomplete="off" />
+            </label>
+            <button class="primary-button" id="openAddRecipe" type="button">
+              <span aria-hidden="true">＋</span> Add recipe
+            </button>
+            <button class="icon-button mobile-settings" id="mobileSettings" type="button" aria-label="Settings and backup">⚙</button>
+          </div>
+        </header>
+
+        <section class="category-section" aria-labelledby="categoryHeading">
+          <div class="section-heading-row">
+            <h2 id="categoryHeading">Browse your cookbook</h2>
+            <span id="recipeCount" aria-live="polite"></span>
+          </div>
+          <div class="category-chips" id="categoryChips" role="group" aria-label="Filter by category"></div>
+        </section>
+
+        <section class="recipe-grid" id="recipeGrid" aria-live="polite"></section>
+
+        <section class="empty-state" id="emptyState" hidden>
+          <div class="empty-illustration" aria-hidden="true">✦</div>
+          <h2 id="emptyTitle">Your next favourite recipe starts here</h2>
+          <p id="emptyCopy">Add a photo, paste recipe text, or start from scratch.</p>
+          <button class="primary-button" id="emptyAddRecipe" type="button">Add your first recipe</button>
+        </section>
+      </main>
+
+      <nav class="bottom-nav" aria-label="Cookbook navigation">
+        <button class="bottom-nav-item active" type="button" data-view="all" aria-pressed="true">
+          <span aria-hidden="true">▦</span><span>Recipes</span>
+        </button>
+        <button class="bottom-nav-item add-bottom" id="bottomAddRecipe" type="button">
+          <span aria-hidden="true">＋</span><span>Add</span>
+        </button>
+        <button class="bottom-nav-item" type="button" data-view="favorites" aria-pressed="false">
+          <span aria-hidden="true">♡</span><span>Favourites</span>
+        </button>
+      </nav>
+    </div>
+
+    <dialog class="sheet-dialog add-dialog" id="addRecipeDialog" aria-labelledby="addDialogTitle">
+      <div class="dialog-shell">
+        <header class="dialog-header">
+          <div>
+            <p class="eyebrow">New recipe</p>
+            <h2 id="addDialogTitle">Bring a recipe into your cookbook</h2>
+          </div>
+          <button class="icon-button close-dialog" type="button" aria-label="Close">×</button>
+        </header>
+
+        <div class="step-indicator" aria-label="Recipe import progress">
+          <span class="step active" data-step-marker="import"><b>1</b> Import</span>
+          <span class="step-line"></span>
+          <span class="step" data-step-marker="review"><b>2</b> Check & save</span>
+        </div>
+
+        <section id="importStep" class="dialog-content">
+          <div class="import-grid">
+            <article class="import-card photo-card">
+              <div class="import-icon" aria-hidden="true">▣</div>
+              <h3>Photo or screenshot</h3>
+              <p>Choose a clear picture containing printed recipe text.</p>
+              <label class="secondary-button file-button" for="recipePhoto">Choose photo</label>
+              <input id="recipePhoto" type="file" accept="image/*" capture="environment" hidden />
+              <div class="photo-preview-wrap" id="photoPreviewWrap" hidden>
+                <img id="photoPreview" alt="Selected recipe preview" />
+                <button class="text-button" id="removePhoto" type="button">Remove photo</button>
+              </div>
+              <button class="secondary-button" id="readPhoto" type="button" disabled>Read text from photo</button>
+              <div class="ocr-progress" id="ocrProgress" hidden>
+                <div class="progress-track"><span id="ocrProgressBar"></span></div>
+                <p id="ocrStatus" aria-live="polite">Preparing text reader…</p>
+              </div>
+            </article>
+
+            <article class="import-card paste-card">
+              <div class="import-icon" aria-hidden="true">≡</div>
+              <h3>Paste recipe text</h3>
+              <p>Paste a caption, recipe page, note, or text copied from social media.</p>
+              <label for="rawRecipeText">Recipe text</label>
+              <textarea
+                id="rawRecipeText"
+                rows="9"
+                placeholder="Lemon chicken&#10;&#10;Ingredients&#10;1 whole chicken…&#10;&#10;Method&#10;1. Heat the oven…"
+              ></textarea>
+              <label for="sourceUrl">Original link <span class="optional">optional</span></label>
+              <input id="sourceUrl" type="url" inputmode="url" placeholder="https://…" />
+              <p class="field-help">Social sites often block automatic reading, so paste their caption or use a screenshot.</p>
+            </article>
+          </div>
+
+          <div class="dialog-actions split-actions">
+            <button class="text-button" id="startBlank" type="button">Start from scratch</button>
+            <button class="primary-button" id="continueToReview" type="button">Review recipe <span aria-hidden="true">→</span></button>
+          </div>
+        </section>
+
+        <section id="reviewStep" class="dialog-content" hidden>
+          <div class="review-notice" role="status">
+            <span aria-hidden="true">✓</span>
+            <div><strong>Please check the details</strong><br />Text recognition can make mistakes. Nothing is saved until you approve it.</div>
+          </div>
+
+          <form id="recipeForm">
+            <input type="hidden" id="recipeId" />
+            <div class="form-photo-row">
+              <div class="review-photo" id="reviewPhotoBox">
+                <img id="reviewPhoto" alt="Recipe" hidden />
+                <span id="reviewPhotoPlaceholder" aria-hidden="true">▣</span>
+              </div>
+              <div class="field grow">
+                <label for="recipeTitle">Recipe name</label>
+                <input id="recipeTitle" required maxlength="100" placeholder="e.g. Sunday lemon chicken" />
+              </div>
+            </div>
+
+            <div class="field">
+              <label for="recipeDescription">A short note <span class="optional">optional</span></label>
+              <input id="recipeDescription" maxlength="180" placeholder="Why you love it, who shared it, or when to make it" />
+            </div>
+
+            <div class="form-grid four-columns">
+              <div class="field">
+                <label for="prepTime">Prep</label>
+                <input id="prepTime" inputmode="numeric" placeholder="15 min" />
+              </div>
+              <div class="field">
+                <label for="cookTime">Cook</label>
+                <input id="cookTime" inputmode="numeric" placeholder="45 min" />
+              </div>
+              <div class="field">
+                <label for="servings">Serves</label>
+                <input id="servings" type="number" inputmode="numeric" min="1" max="99" placeholder="4" />
+              </div>
+              <div class="field">
+                <label for="category">Category</label>
+                <input id="category" list="categoryOptions" placeholder="Dinner" />
+                <datalist id="categoryOptions">
+                  <option value="Breakfast"></option><option value="Lunch"></option>
+                  <option value="Dinner"></option><option value="Dessert"></option>
+                  <option value="Baking"></option><option value="Soup"></option>
+                  <option value="Salad"></option><option value="Side"></option>
+                  <option value="Snack"></option><option value="Drink"></option>
+                </datalist>
+              </div>
+            </div>
+
+            <div class="field">
+              <label for="recipeTags">Tags <span class="optional">separate with commas</span></label>
+              <input id="recipeTags" placeholder="Italian, vegetarian, quick" />
+            </div>
+
+            <div class="two-column-fields">
+              <div class="field">
+                <label for="ingredients">Ingredients <span class="field-count" id="ingredientCount"></span></label>
+                <textarea id="ingredients" required rows="12" placeholder="One ingredient per line"></textarea>
+              </div>
+              <div class="field">
+                <label for="instructions">Method <span class="field-count" id="instructionCount"></span></label>
+                <textarea id="instructions" required rows="12" placeholder="One step per line"></textarea>
+              </div>
+            </div>
+
+            <div class="field">
+              <label for="reviewSourceUrl">Original link <span class="optional">optional</span></label>
+              <input id="reviewSourceUrl" type="url" inputmode="url" placeholder="https://…" />
+            </div>
+
+            <div class="dialog-actions split-actions">
+              <button class="text-button" id="backToImport" type="button"><span aria-hidden="true">←</span> Back</button>
+              <button class="primary-button" type="submit">Save to cookbook</button>
+            </div>
+          </form>
+        </section>
+      </div>
+    </dialog>
+
+    <dialog class="recipe-dialog" id="recipeDialog" aria-labelledby="detailTitle">
+      <article id="recipeDetail"></article>
+    </dialog>
+
+    <dialog class="sheet-dialog settings-dialog" id="settingsDialog" aria-labelledby="settingsTitle">
+      <div class="dialog-shell">
+        <header class="dialog-header">
+          <div>
+            <p class="eyebrow">Keep it safe</p>
+            <h2 id="settingsTitle">Settings & backup</h2>
+          </div>
+          <button class="icon-button close-dialog" type="button" aria-label="Close">×</button>
+        </header>
+        <div class="dialog-content settings-content">
+          <section class="setting-card">
+            <div>
+              <h3>Install on your iPad</h3>
+              <p>In Safari, tap the Share button, then <strong>Add to Home Screen</strong> and turn on <strong>Open as Web App</strong>.</p>
+            </div>
+            <span class="setting-symbol" aria-hidden="true">□↑</span>
+          </section>
+          <section class="setting-card">
+            <div>
+              <h3>Back up your cookbook</h3>
+              <p>Download one private backup containing your recipes and their photos.</p>
+            </div>
+            <button class="secondary-button" id="exportBackup" type="button">Download backup</button>
+          </section>
+          <section class="setting-card">
+            <div>
+              <h3>Restore a backup</h3>
+              <p>Import a cookbook backup. Existing recipes with different IDs will be kept.</p>
+            </div>
+            <label class="secondary-button file-button" for="importBackup">Choose backup</label>
+            <input id="importBackup" type="file" accept="application/json,.json,.cookbook" hidden />
+          </section>
+          <p class="privacy-copy">Your recipes and photos are stored inside this browser on this device. No account, subscription, or paid service is used.</p>
+        </div>
+      </div>
+    </dialog>
+
+    <div class="toast-region" id="toastRegion" aria-live="polite" aria-atomic="true"></div>
+    <noscript>This cookbook needs JavaScript enabled to save and organise recipes.</noscript>
+  </body>
+</html>
+

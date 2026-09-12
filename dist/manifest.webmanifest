@@ -1,0 +1,19 @@
+{
+  "name": "My Cookbook",
+  "short_name": "Cookbook",
+  "description": "A private, offline-friendly cookbook for your iPad.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f7f4f0",
+  "theme_color": "#241a33",
+  "icons": [
+    {
+      "src": "./assets/icon-192.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
+
