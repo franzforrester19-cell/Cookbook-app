@@ -4,8 +4,9 @@ A free, private, installable cookbook designed for iPad. Recipes and photos stay
 
 ## What it does
 
-- Adds recipes from a photo, screenshot, pasted text, social caption, or manual entry.
-- Uses free in-browser OCR for clear printed recipe photos.
+- Opens the iPad camera or Photos library from the **Scan recipe** button.
+- Automatically reads a selected photo or screenshot with free in-browser OCR, then opens the extracted recipe for review.
+- Also supports pasted text or manual entry when needed.
 - Extracts ingredients, method, cooking times, servings, and suggested categories for review.
 - Searches recipes, filters categories, and saves favourites.
 - Adjusts ingredient amounts when servings change.
@@ -31,4 +32,3 @@ Serve the `dist` folder with any small static web server. Service workers and in
 ## Licence
 
 MIT. Tesseract.js is provided separately under the Apache-2.0 licence.
-

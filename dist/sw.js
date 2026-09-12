@@ -1,4 +1,4 @@
-const CACHE_NAME = "my-cookbook-shell-v5";
+const CACHE_NAME = "my-cookbook-shell-v8";
 const APP_SHELL = [
   "./",
   "./index.html",
@@ -38,4 +38,3 @@ self.addEventListener("fetch", (event) => {
     })
   );
 });
-

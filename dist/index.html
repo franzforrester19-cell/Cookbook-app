@@ -60,7 +60,7 @@
               <input id="searchInput" type="search" placeholder="Search recipes" autocomplete="off" />
             </label>
             <button class="primary-button" id="openAddRecipe" type="button">
-              <span aria-hidden="true">＋</span> Add recipe
+              <span aria-hidden="true">▣</span> Scan recipe
             </button>
             <button class="icon-button mobile-settings" id="mobileSettings" type="button" aria-label="Settings and backup">⚙</button>
           </div>
@@ -79,8 +79,8 @@
         <section class="empty-state" id="emptyState" hidden>
           <div class="empty-illustration" aria-hidden="true">✦</div>
           <h2 id="emptyTitle">Your next favourite recipe starts here</h2>
-          <p id="emptyCopy">Add a photo, paste recipe text, or start from scratch.</p>
-          <button class="primary-button" id="emptyAddRecipe" type="button">Add your first recipe</button>
+          <p id="emptyCopy">Take a photo or choose a screenshot and the recipe will be filled in for you.</p>
+          <button class="primary-button" id="emptyAddRecipe" type="button">Scan your first recipe</button>
         </section>
       </main>
 
@@ -89,7 +89,7 @@
           <span aria-hidden="true">▦</span><span>Recipes</span>
         </button>
         <button class="bottom-nav-item add-bottom" id="bottomAddRecipe" type="button">
-          <span aria-hidden="true">＋</span><span>Add</span>
+          <span aria-hidden="true">▣</span><span>Scan</span>
         </button>
         <button class="bottom-nav-item" type="button" data-view="favorites" aria-pressed="false">
           <span aria-hidden="true">♡</span><span>Favourites</span>
@@ -102,55 +102,72 @@
         <header class="dialog-header">
           <div>
             <p class="eyebrow">New recipe</p>
-            <h2 id="addDialogTitle">Bring a recipe into your cookbook</h2>
+            <h2 id="addDialogTitle">Scan a recipe into your cookbook</h2>
           </div>
           <button class="icon-button close-dialog" type="button" aria-label="Close">×</button>
         </header>
 
         <div class="step-indicator" aria-label="Recipe import progress">
-          <span class="step active" data-step-marker="import"><b>1</b> Import</span>
+          <span class="step active" data-step-marker="import"><b>1</b> Add a picture</span>
           <span class="step-line"></span>
           <span class="step" data-step-marker="review"><b>2</b> Check & save</span>
         </div>
 
         <section id="importStep" class="dialog-content">
-          <div class="import-grid">
-            <article class="import-card photo-card">
+          <article class="scan-card">
+            <div class="scan-intro">
               <div class="import-icon" aria-hidden="true">▣</div>
-              <h3>Photo or screenshot</h3>
-              <p>Choose a clear picture containing printed recipe text.</p>
-              <label class="secondary-button file-button" for="recipePhoto">Choose photo</label>
-              <input id="recipePhoto" type="file" accept="image/*" capture="environment" hidden />
-              <div class="photo-preview-wrap" id="photoPreviewWrap" hidden>
-                <img id="photoPreview" alt="Selected recipe preview" />
-                <button class="text-button" id="removePhoto" type="button">Remove photo</button>
+              <div>
+                <h3>Scan a recipe from a picture</h3>
+                <p>Use a clear, straight picture with the whole recipe visible. Your iPad will read the title, ingredients and method automatically.</p>
               </div>
-              <button class="secondary-button" id="readPhoto" type="button" disabled>Read text from photo</button>
-              <div class="ocr-progress" id="ocrProgress" hidden>
-                <div class="progress-track"><span id="ocrProgressBar"></span></div>
-                <p id="ocrStatus" aria-live="polite">Preparing text reader…</p>
-              </div>
-            </article>
+            </div>
 
-            <article class="import-card paste-card">
-              <div class="import-icon" aria-hidden="true">≡</div>
-              <h3>Paste recipe text</h3>
-              <p>Paste a caption, recipe page, note, or text copied from social media.</p>
+            <div class="capture-choice-grid">
+              <label class="capture-choice camera-choice" for="takeRecipePhoto">
+                <span class="capture-choice-icon" aria-hidden="true">◎</span>
+                <strong>Take a photo</strong>
+                <span>Open your iPad camera</span>
+              </label>
+              <input id="takeRecipePhoto" type="file" accept="image/*" capture="environment" hidden />
+
+              <label class="capture-choice library-choice" for="chooseRecipeImage">
+                <span class="capture-choice-icon" aria-hidden="true">▧</span>
+                <strong>Choose a screenshot or photo</strong>
+                <span>Pick one from Photos or Files</span>
+              </label>
+              <input id="chooseRecipeImage" type="file" accept="image/*" hidden />
+            </div>
+
+            <div class="photo-preview-wrap" id="photoPreviewWrap" hidden>
+              <img id="photoPreview" alt="Selected recipe preview" />
+              <button class="text-button" id="removePhoto" type="button">Choose another</button>
+            </div>
+
+            <div class="ocr-progress" id="ocrProgress" hidden>
+              <div class="progress-track"><span id="ocrProgressBar"></span></div>
+              <p id="ocrStatus" aria-live="polite">Preparing text reader…</p>
+            </div>
+            <button class="secondary-button retry-photo-button" id="readPhoto" type="button" hidden>Read this picture again</button>
+          </article>
+
+          <details class="manual-import">
+            <summary>Paste recipe text instead</summary>
+            <div class="manual-import-body paste-card">
               <label for="rawRecipeText">Recipe text</label>
               <textarea
                 id="rawRecipeText"
-                rows="9"
+                rows="8"
                 placeholder="Lemon chicken&#10;&#10;Ingredients&#10;1 whole chicken…&#10;&#10;Method&#10;1. Heat the oven…"
               ></textarea>
               <label for="sourceUrl">Original link <span class="optional">optional</span></label>
               <input id="sourceUrl" type="url" inputmode="url" placeholder="https://…" />
-              <p class="field-help">Social sites often block automatic reading, so paste their caption or use a screenshot.</p>
-            </article>
-          </div>
+              <button class="secondary-button" id="continueToReview" type="button">Review pasted recipe</button>
+            </div>
+          </details>
 
-          <div class="dialog-actions split-actions">
-            <button class="text-button" id="startBlank" type="button">Start from scratch</button>
-            <button class="primary-button" id="continueToReview" type="button">Review recipe <span aria-hidden="true">→</span></button>
+          <div class="dialog-actions blank-action">
+            <button class="text-button" id="startBlank" type="button">Or enter a recipe by hand</button>
           </div>
         </section>
 
@@ -279,4 +296,3 @@
     <noscript>This cookbook needs JavaScript enabled to save and organise recipes.</noscript>
   </body>
 </html>
-

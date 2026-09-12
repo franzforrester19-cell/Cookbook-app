@@ -211,7 +211,7 @@ function renderRecipes() {
       $("#emptyAddRecipe").textContent = "Browse all recipes";
     } else {
       $("#emptyTitle").textContent = "Your next favourite recipe starts here";
-      $("#emptyCopy").textContent = "Add a photo, paste recipe text, or start from scratch.";
+      $("#emptyCopy").textContent = "Take a photo or choose a screenshot and the recipe will be filled in for you.";
       $("#emptyAddRecipe").textContent = "Add your first recipe";
     }
     return;
@@ -297,9 +297,10 @@ function bindEvents() {
   });
   $("#recipeGrid").addEventListener("click", handleGridClick);
 
-  $("#recipePhoto").addEventListener("change", handlePhotoSelection);
+  $("#takeRecipePhoto").addEventListener("change", handlePhotoSelection);
+  $("#chooseRecipeImage").addEventListener("change", handlePhotoSelection);
   $("#removePhoto").addEventListener("click", clearSelectedPhoto);
-  $("#readPhoto").addEventListener("click", readPhotoText);
+  $("#readPhoto").addEventListener("click", () => readPhotoText({ autoReview: true }));
   $("#continueToReview").addEventListener("click", () => prepareReview(false));
   $("#startBlank").addEventListener("click", () => prepareReview(true));
   $("#backToImport").addEventListener("click", showImportStep);
@@ -356,7 +357,8 @@ function openAddDialog(recipe = null) {
 function resetImportFlow() {
   $("#rawRecipeText").value = "";
   $("#sourceUrl").value = "";
-  $("#recipePhoto").value = "";
+  $("#takeRecipePhoto").value = "";
+  $("#chooseRecipeImage").value = "";
   $("#recipeForm").reset();
   $("#recipeId").value = "";
   state.currentPhoto = "";
@@ -392,10 +394,13 @@ async function handlePhotoSelection(event) {
     return;
   }
   try {
+    const otherInput = event.target.id === "takeRecipePhoto" ? $("#chooseRecipeImage") : $("#takeRecipePhoto");
+    otherInput.value = "";
     state.currentPhoto = await compressImage(file);
     $("#photoPreview").src = state.currentPhoto;
     $("#photoPreviewWrap").hidden = false;
-    $("#readPhoto").disabled = false;
+    $("#readPhoto").hidden = true;
+    await readPhotoText({ autoReview: true });
   } catch (error) {
     console.error(error);
     showToast("I could not open that photo.", "error");
@@ -426,21 +431,24 @@ function compressImage(file) {
 
 function clearSelectedPhoto() {
   state.currentPhoto = "";
-  $("#recipePhoto").value = "";
+  $("#takeRecipePhoto").value = "";
+  $("#chooseRecipeImage").value = "";
   $("#photoPreview").removeAttribute("src");
   $("#photoPreviewWrap").hidden = true;
-  $("#readPhoto").disabled = true;
+  $("#readPhoto").hidden = true;
   $("#ocrProgress").hidden = true;
 }
 
-async function readPhotoText() {
+async function readPhotoText({ autoReview = false } = {}) {
   if (!state.currentPhoto) return;
   if (!globalThis.Tesseract) {
     showToast("The free text reader did not load. Check your connection and try again.", "error");
+    $("#readPhoto").hidden = false;
     return;
   }
   const button = $("#readPhoto");
   button.disabled = true;
+  button.hidden = true;
   $("#ocrProgress").hidden = false;
   $("#ocrStatus").textContent = "Preparing the free text reader…";
   $("#ocrProgressBar").style.width = "5%";
@@ -460,12 +468,17 @@ async function readPhotoText() {
     if (!text) throw new Error("No text found");
     $("#rawRecipeText").value = text;
     $("#ocrProgressBar").style.width = "100%";
-    $("#ocrStatus").textContent = "Text found — please check it below.";
-    showToast("Recipe text extracted");
+    $("#ocrStatus").textContent = "Recipe found — opening it for you to check.";
+    showToast("Recipe extracted from the picture");
+    if (autoReview) {
+      await new Promise((resolve) => setTimeout(resolve, 250));
+      prepareReview(false);
+    }
   } catch (error) {
     console.error("OCR failed", error);
     $("#ocrStatus").textContent = "No clear printed text was found. Try a brighter, straighter photo.";
     showToast("I could not read that photo clearly.", "error");
+    button.hidden = false;
   } finally {
     if (worker) await worker.terminate().catch(() => {});
     button.disabled = false;
@@ -487,7 +500,7 @@ function prepareReview(blank) {
   const raw = $("#rawRecipeText").value.trim();
   const url = $("#sourceUrl").value.trim();
   if (!blank && !raw) {
-    showToast("Add a photo or paste the recipe text first.", "error");
+    showToast("Choose a recipe picture or paste the recipe text first.", "error");
     $("#rawRecipeText").focus();
     return;
   }
@@ -1047,4 +1060,3 @@ function recipeSummary(recipe) {
 }
 
 document.addEventListener("DOMContentLoaded", initialise);
-
