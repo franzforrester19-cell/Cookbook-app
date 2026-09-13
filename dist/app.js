@@ -47,6 +47,7 @@ const state = {
   activeView: "all",
   search: "",
   currentPhoto: "",
+  ocrImages: [],
   editingImage: "",
   detailId: null,
   detailServings: null
@@ -396,7 +397,9 @@ async function handlePhotoSelection(event) {
   try {
     const otherInput = event.target.id === "takeRecipePhoto" ? $("#chooseRecipeImage") : $("#takeRecipePhoto");
     otherInput.value = "";
-    state.currentPhoto = await compressImage(file);
+    const prepared = await prepareRecipeImage(file);
+    state.currentPhoto = prepared.preview;
+    state.ocrImages = prepared.ocrImages;
     $("#photoPreview").src = state.currentPhoto;
     $("#photoPreviewWrap").hidden = false;
     $("#readPhoto").hidden = true;
@@ -407,7 +410,7 @@ async function handlePhotoSelection(event) {
   }
 }
 
-function compressImage(file) {
+function prepareRecipeImage(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onerror = () => reject(reader.error);
@@ -415,13 +418,14 @@ function compressImage(file) {
       const image = new Image();
       image.onerror = () => reject(new Error("Image decode failed"));
       image.onload = () => {
-        const maxEdge = 1600;
-        const scale = Math.min(1, maxEdge / Math.max(image.naturalWidth, image.naturalHeight));
-        const canvas = document.createElement("canvas");
-        canvas.width = Math.round(image.naturalWidth * scale);
-        canvas.height = Math.round(image.naturalHeight * scale);
-        canvas.getContext("2d", { alpha: false }).drawImage(image, 0, 0, canvas.width, canvas.height);
-        resolve(canvas.toDataURL("image/jpeg", 0.84));
+        const preview = renderImageRegion(image, {
+          sourceY: 0,
+          sourceHeight: image.naturalHeight,
+          scale: Math.min(1, 1600 / Math.max(image.naturalWidth, image.naturalHeight)),
+          mimeType: "image/jpeg",
+          quality: 0.84
+        });
+        resolve({ preview, ocrImages: buildOcrImages(image) });
       };
       image.src = reader.result;
     };
@@ -429,8 +433,67 @@ function compressImage(file) {
   });
 }
 
+function buildOcrImages(image) {
+  const width = image.naturalWidth;
+  const height = image.naturalHeight;
+  const isLongScreenshot = height / width > 1.8;
+
+  if (!isLongScreenshot) {
+    const scale = Math.min(1, 2200 / Math.max(width, height));
+    return [renderImageRegion(image, {
+      sourceY: 0,
+      sourceHeight: height,
+      scale,
+      mimeType: "image/jpeg",
+      quality: 0.92
+    })];
+  }
+
+  // Full-page screenshots become unreadable if their long edge is squeezed
+  // down. Preserve the text width and read them in overlapping strips.
+  const scale = Math.min(1, 1800 / width);
+  const scaledHeight = Math.round(height * scale);
+  const stripHeight = 1800;
+  const overlap = 140;
+  const images = [];
+
+  for (let scaledY = 0; scaledY < scaledHeight && images.length < 10; scaledY += stripHeight - overlap) {
+    const scaledSliceHeight = Math.min(stripHeight, scaledHeight - scaledY);
+    images.push(renderImageRegion(image, {
+      sourceY: scaledY / scale,
+      sourceHeight: scaledSliceHeight / scale,
+      scale,
+      mimeType: "image/png"
+    }));
+    if (scaledY + scaledSliceHeight >= scaledHeight) break;
+  }
+  return images;
+}
+
+function renderImageRegion(image, { sourceY, sourceHeight, scale, mimeType, quality }) {
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.max(1, Math.round(image.naturalWidth * scale));
+  canvas.height = Math.max(1, Math.round(sourceHeight * scale));
+  const context = canvas.getContext("2d", { alpha: false });
+  context.fillStyle = "#ffffff";
+  context.fillRect(0, 0, canvas.width, canvas.height);
+  context.drawImage(
+    image,
+    0,
+    sourceY,
+    image.naturalWidth,
+    sourceHeight,
+    0,
+    0,
+    canvas.width,
+    canvas.height
+  );
+  return canvas.toDataURL(mimeType, quality);
+}
+
 function clearSelectedPhoto() {
   state.currentPhoto = "";
+  state.ocrImages = [];
   $("#takeRecipePhoto").value = "";
   $("#chooseRecipeImage").value = "";
   $("#photoPreview").removeAttribute("src");
@@ -455,16 +518,29 @@ async function readPhotoText({ autoReview = false } = {}) {
 
   let worker;
   try {
+    const targets = state.ocrImages.length ? state.ocrImages : [state.currentPhoto];
+    let activePart = 0;
     worker = await globalThis.Tesseract.createWorker("eng", 1, {
       logger(message) {
         if (typeof message.progress === "number") {
-          $("#ocrProgressBar").style.width = `${Math.max(5, Math.round(message.progress * 100))}%`;
+          const percent = message.status === "recognizing text"
+            ? 10 + ((activePart + message.progress) / targets.length) * 90
+            : 5 + message.progress * 5;
+          $("#ocrProgressBar").style.width = Math.min(99, Math.round(percent)) + "%";
         }
         if (message.status) $("#ocrStatus").textContent = friendlyOcrStatus(message.status);
       }
     });
-    const result = await worker.recognize(state.currentPhoto);
-    const text = result.data.text.trim();
+    const textParts = [];
+    for (let index = 0; index < targets.length; index += 1) {
+      activePart = index;
+      const partNumber = index + 1;
+      if (targets.length > 1) $("#ocrStatus").textContent = "Reading part " + partNumber + " of " + targets.length + "…";
+      const result = await worker.recognize(targets[index]);
+      if (result.data.text.trim()) textParts.push(result.data.text.trim());
+      $("#ocrProgressBar").style.width = Math.round((partNumber / targets.length) * 100) + "%";
+    }
+    const text = textParts.join("\n").trim();
     if (!text) throw new Error("No text found");
     $("#rawRecipeText").value = text;
     $("#ocrProgressBar").style.width = "100%";
@@ -527,9 +603,11 @@ function emptyRecipe(sourceUrl = "") {
 
 function parseRecipeText(rawText, sourceUrl = "") {
   const rawLines = rawText.replaceAll("\r", "").split("\n");
-  const lines = rawLines.map((line) => line.trim()).filter(Boolean);
-  const ingredientsHeader = lines.findIndex((line) => /^ingredients?\s*:?$/i.test(line));
-  const instructionsHeader = lines.findIndex((line) => /^(instructions?|directions?|method|preparation)\s*:?$/i.test(line));
+  const lines = collapseOcrOverlap(rawLines.map((line) => line.trim()).filter(Boolean));
+  const ingredientsHeader = lines.findIndex((line) => sectionKind(line) === "ingredients");
+  const instructionsHeader = lines.findIndex((line, index) => {
+    return index > ingredientsHeader && sectionKind(line) === "instructions";
+  });
   const firstHeader = [ingredientsHeader, instructionsHeader].filter((index) => index >= 0).sort((a, b) => a - b)[0] ?? lines.length;
   const preamble = lines.slice(0, firstHeader);
   const title = findTitle(preamble, lines);
@@ -540,7 +618,12 @@ function parseRecipeText(rawText, sourceUrl = "") {
     const end = instructionsHeader > ingredientsHeader ? instructionsHeader : lines.length;
     ingredientLines = lines.slice(ingredientsHeader + 1, end);
   }
-  if (instructionsHeader >= 0) instructionLines = lines.slice(instructionsHeader + 1);
+  if (instructionsHeader >= 0) {
+    const nextSection = lines.findIndex((line, index) => {
+      return index > instructionsHeader && ["notes", "nutrition"].includes(sectionKind(line));
+    });
+    instructionLines = lines.slice(instructionsHeader + 1, nextSection > instructionsHeader ? nextSection : lines.length);
+  }
 
   if (!ingredientLines.length || !instructionLines.length) {
     const bodyStart = Math.min(firstHeader + 1, lines.length);
@@ -551,8 +634,8 @@ function parseRecipeText(rawText, sourceUrl = "") {
     if (!instructionLines.length) instructionLines = inferredInstructions;
   }
 
-  ingredientLines = ingredientLines.map(cleanListLine).filter(validRecipeLine);
-  instructionLines = instructionLines.map(cleanListLine).filter(validRecipeLine);
+  ingredientLines = dedupeRecipeLines(ingredientLines.map(cleanListLine).filter(validRecipeLine));
+  instructionLines = normaliseInstructionLines(instructionLines);
   const fullText = lines.join(" ");
   const classification = classifyRecipe(`${title} ${fullText}`);
 
@@ -573,8 +656,139 @@ function parseRecipeText(rawText, sourceUrl = "") {
 
 function findTitle(preamble, allLines) {
   const excluded = /^(recipe|ingredients?|instructions?|directions?|method|prep(?:aration)?\s*time|cook\s*time|total\s*time|serves?|servings?|yield)\b/i;
-  const candidates = preamble.filter((line) => !excluded.test(line) && !/^https?:\/\//i.test(line));
-  return cleanListLine(candidates[0] || allLines.find((line) => !excluded.test(line)) || "Untitled recipe").slice(0, 100);
+  const interfaceNoise = /^(?:go back|print|recipe image|nutrition label|notes|us customary|metric|smaller|normal|larger|scan for full recipe|[-+]?\s*\d+\s*(?:servings?|portions?))$/i;
+  const candidates = preamble
+    .map((line, index) => ({ line: cleanListLine(line), index }))
+    .filter(({ line }) => {
+      if (!line || excluded.test(line) || interfaceNoise.test(line) || /^https?:\/\//i.test(line)) return false;
+      if (/^(?:author|copyright|©)\b/i.test(line)) return false;
+      return /[a-z]/i.test(line);
+    });
+
+  const scored = candidates.map((candidate) => {
+    const line = candidate.line;
+    const nearby = preamble.slice(candidate.index + 1, candidate.index + 4).join(" ");
+    let score = 0;
+    if (line.length >= 4 && line.length <= 60) score += 4;
+    if (line.split(/\s+/).length <= 8) score += 2;
+    if (/(?:author|servings?|prep\s*time|cook\s*time)\s*:/i.test(nearby)) score += 6;
+    if (/^[A-Z][^.!?]*$/i.test(line) && !/[.!?]$/.test(line)) score += 2;
+    if (line.length > 80 || /[.!?]$/.test(line)) score -= 4;
+    if (/kitchen|cookbook|recipes?\s*$/i.test(line)) score -= 3;
+    return { ...candidate, score };
+  }).sort((a, b) => b.score - a.score || a.index - b.index);
+
+  const fallback = allLines.find((line) => !excluded.test(line) && !interfaceNoise.test(line));
+  return trimTitleArtifacts(cleanListLine(scored[0]?.line || fallback || "Untitled recipe")).slice(0, 100);
+}
+
+function trimTitleArtifacts(line) {
+  return line
+    .replace(/\s+[^\s]*[—_=|\\][^\s]*$/u, "")
+    .trim();
+}
+
+function collapseOcrOverlap(lines) {
+  const result = [];
+  const recentKeys = [];
+  for (const line of lines) {
+    const key = line.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+    if (!key) continue;
+    if (key.length > 8 && recentKeys.slice(-10).includes(key)) continue;
+    result.push(line);
+    recentKeys.push(key);
+  }
+  return result;
+}
+
+function sectionKind(line) {
+  const label = line.toLowerCase().replace(/[^a-z]/g, "");
+  if (!label || label.length > 28) return "";
+  if (/^(?:ingredients?|ingredientlist|whatyouneed)$/.test(label) || editDistance(label, "ingredients") <= 2) {
+    return "ingredients";
+  }
+  if (/^(?:instructions?|directions?|method|preparation|howtomake)$/.test(label)
+    || editDistance(label, "instructions") <= 2
+    || editDistance(label, "directions") <= 2) {
+    return "instructions";
+  }
+  if (/^(?:notes?|storage|tips?|equipment)$/.test(label)) return "notes";
+  if (/^(?:nutrition|nutritionfacts?|nutritionperserving)$/.test(label)) return "nutrition";
+  return "";
+}
+
+function editDistance(a, b) {
+  if (Math.abs(a.length - b.length) > 2) return 99;
+  const row = Array.from({ length: b.length + 1 }, (_, index) => index);
+  for (let i = 1; i <= a.length; i += 1) {
+    let previous = row[0];
+    row[0] = i;
+    for (let j = 1; j <= b.length; j += 1) {
+      const saved = row[j];
+      row[j] = Math.min(row[j] + 1, row[j - 1] + 1, previous + (a[i - 1] === b[j - 1] ? 0 : 1));
+      previous = saved;
+    }
+  }
+  return row[b.length];
+}
+
+function dedupeRecipeLines(lines) {
+  const seen = new Set();
+  return lines.filter((line) => {
+    const key = line.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+    if (!key || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function normaliseInstructionLines(lines) {
+  const numberedSteps = new Map();
+  const looseLines = [];
+  let currentNumber = null;
+  let currentText = "";
+
+  const saveCurrent = () => {
+    if (!currentText.trim()) return;
+    const text = cleanListLine(currentText).trim();
+    if (currentNumber !== null) {
+      const previous = numberedSteps.get(currentNumber) || "";
+      if (text.length > previous.length) numberedSteps.set(currentNumber, text);
+    } else {
+      looseLines.push(text);
+    }
+    currentNumber = null;
+    currentText = "";
+  };
+
+  for (const sourceLine of lines) {
+    if (sectionKind(sourceLine) === "instructions") {
+      saveCurrent();
+      continue;
+    }
+    if (/^\s*[-+•*«]\s*/.test(sourceLine) && looksLikeIngredient(sourceLine)) {
+      saveCurrent();
+      continue;
+    }
+    const numbered = /^\s*(\d+)[.)]\s*(.+)$/.exec(sourceLine);
+    if (numbered) {
+      saveCurrent();
+      currentNumber = Number(numbered[1]);
+      currentText = numbered[2];
+      continue;
+    }
+    if (currentText) currentText += " " + sourceLine;
+    else looseLines.push(cleanListLine(sourceLine));
+  }
+  saveCurrent();
+
+  if (numberedSteps.size >= 2) {
+    return [...numberedSteps.entries()]
+      .sort(([a], [b]) => a - b)
+      .map(([, text]) => text)
+      .filter(validRecipeLine);
+  }
+  return dedupeRecipeLines(looseLines.map(cleanListLine).filter(validRecipeLine));
 }
 
 function looksLikeMetadata(line) {
@@ -592,11 +806,12 @@ function cleanListLine(line) {
 }
 
 function validRecipeLine(line) {
-  return line.length > 1 && !/^(ingredients?|instructions?|directions?|method|preparation)\s*:?$/i.test(line);
+  return line.length > 1 && !sectionKind(line);
 }
 
 function extractTime(text, kind) {
-  const pattern = new RegExp(`${kind}(?:aration)?(?:\\s+time)?\\s*:?\\s*(\\d+(?:\\s*(?:hours?|hrs?|hr|minutes?|mins?|min))?(?:\\s+\\d+\\s*(?:minutes?|mins?|min))?)`, "i");
+  const label = kind === "cook" ? "(?:cook|cool)" : kind;
+  const pattern = new RegExp(`${label}(?:aration)?(?:\\s+time)?\\s*:?\\s*(\\d+(?:\\s*(?:hours?|hrs?|hr|minutes?|mins?|min))?(?:\\s+\\d+\\s*(?:minutes?|mins?|min))?)`, "i");
   return pattern.exec(text)?.[1]?.trim() || "";
 }
 

@@ -6,6 +6,7 @@ A free, private, installable cookbook designed for iPad. Recipes and photos stay
 
 - Opens the iPad camera or Photos library from the **Scan recipe** button.
 - Automatically reads a selected photo or screenshot with free in-browser OCR, then opens the extracted recipe for review.
+- Preserves small text in tall, full-page screenshots by reading them in clear overlapping sections.
 - Also supports pasted text or manual entry when needed.
 - Extracts ingredients, method, cooking times, servings, and suggested categories for review.
 - Searches recipes, filters categories, and saves favourites.
