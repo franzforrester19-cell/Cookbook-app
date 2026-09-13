@@ -451,7 +451,7 @@ function buildOcrImages(image) {
 
   // Full-page screenshots become unreadable if their long edge is squeezed
   // down. Preserve the text width and read them in overlapping strips.
-  const scale = Math.min(1, 1800 / width);
+  const scale = Math.min(2, 1800 / width);
   const scaledHeight = Math.round(height * scale);
   const stripHeight = 1800;
   const overlap = 140;
@@ -704,10 +704,13 @@ function collapseOcrOverlap(lines) {
 function sectionKind(line) {
   const label = line.toLowerCase().replace(/[^a-z]/g, "");
   if (!label || label.length > 28) return "";
-  if (/^(?:ingredients?|ingredientlist|whatyouneed)$/.test(label) || editDistance(label, "ingredients") <= 2) {
+  if (/^(?:ingredients?|ingredientlist|whatyouneed)$/.test(label)
+    || /^ingredients?[a-z]{0,6}$/.test(label)
+    || editDistance(label, "ingredients") <= 2) {
     return "ingredients";
   }
   if (/^(?:instructions?|directions?|method|preparation|howtomake)$/.test(label)
+    || /^(?:instructions?|directions?)[a-z]{0,6}$/.test(label)
     || editDistance(label, "instructions") <= 2
     || editDistance(label, "directions") <= 2) {
     return "instructions";
@@ -802,7 +805,7 @@ function looksLikeIngredient(line) {
 }
 
 function cleanListLine(line) {
-  return line.replace(/^\s*(?:[-•*▪◦]+|\d+[.)])\s*/, "").trim();
+  return line.replace(/^\s*(?:[-+•*▪◦«©]+|\d+[.)])\s*/, "").trim();
 }
 
 function validRecipeLine(line) {
